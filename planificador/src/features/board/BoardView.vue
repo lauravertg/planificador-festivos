@@ -37,54 +37,58 @@ initAuth	@	auth.js:14
         </tr>
       </thead>
       <tbody>
-        <tr v-if="dataStore.mockClients.length === 0">
-          <td colspan="100" class="p-8 text-center text-gray-500">No hay clientes (Usando mock).</td>
+        <tr v-if="dataStore.plataformas.length === 0">
+          <td colspan="100" class="p-8 text-center text-gray-500">
+            <span v-if="dataStore.loading">Cargando plataformas...</span>
+            <span v-else>No hay plataformas activas.</span>
+          </td>
         </tr>
-        <tr v-for="client in dataStore.mockClients" :key="client.id" class="hover:bg-gray-50 transition-colors">
+        <tr v-for="plataforma in dataStore.plataformas" :key="plataforma.id" class="hover:bg-gray-50 transition-colors">
           <!-- Columna Cliente -->
           <td class="sticky left-0 z-10 bg-white border-r border-b border-gray-300 p-3 font-medium text-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-            {{ client.name }}
+            <div>{{ plataforma.nombre }}</div>
+            <div v-if="plataforma.cliente_nombre" class="text-xs text-gray-500">{{ plataforma.cliente_nombre }}</div>
           </td>
 
           <!-- Celdas de Días -->
           <td
             v-for="date in dateColumns"
-            :key="`${client.id}-${date}`"
-            @click="handleCellClick(client.id, date)"
+            :key="`${plataforma.id}-${date}`"
+            @click="handleCellClick(plataforma.id, date)"
             class="border-b border-r border-gray-200 h-28 relative cursor-pointer select-none group transition-all"
             :class="{
-              'hover:bg-blue-50': !getOrder(client.id, date),
-              'bg-white hover:ring-2 hover:ring-blue-300 hover:z-10': getOrder(client.id, date),
+              'hover:bg-blue-50': !getOrder(plataforma.id, date),
+              'bg-white hover:ring-2 hover:ring-blue-300 hover:z-10': getOrder(plataforma.id, date),
               'bg-red-50/30': isHoliday(date)
             }"
           >
-            <div v-if="!getOrder(client.id, date)" class="w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-30">
+            <div v-if="!getOrder(plataforma.id, date)" class="w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-30">
               <Plus size="20" class="text-blue-500" />
             </div>
             <div v-else class="w-full h-full p-1 text-[10px] leading-tight relative">
-              <div v-if="!getOrder(client.id, date).delivers" class="w-full h-full flex items-center justify-center bg-gray-100">
+              <div v-if="!getOrder(plataforma.id, date).delivers" class="w-full h-full flex items-center justify-center bg-gray-100">
                 <span class="text-2xl font-bold text-gray-300">NO</span>
               </div>
               <template v-else>
                 <div class="absolute top-1 left-1 text-blue-700 font-bold max-w-[60%] truncate">
-                  {{ formatDate(getOrder(client.id, date).receptionDate) }} {{ getOrder(client.id, date).receptionTime }}
+                  {{ formatDate(getOrder(plataforma.id, date).receptionDate) }} {{ getOrder(plataforma.id, date).receptionTime }}
                 </div>
                 <div class="absolute top-1 right-1 text-right text-black font-bold max-w-[60%] truncate">
-                  {{ getOrder(client.id, date).transportCompany || 'SIN ASIGNAR' }}
+                  {{ getOrder(plataforma.id, date).transportCompany || 'SIN ASIGNAR' }}
                 </div>
-                <div v-if="getOrder(client.id, date).transportComments" class="absolute inset-x-1 top-6 bottom-6 flex items-center justify-center text-center text-gray-400 italic text-[9px] overflow-hidden">
-                  "{{ getOrder(client.id, date).transportComments.substring(0, 20) }}..."
+                <div v-if="getOrder(plataforma.id, date).transportComments" class="absolute inset-x-1 top-6 bottom-6 flex items-center justify-center text-center text-gray-400 italic text-[9px] overflow-hidden">
+                  "{{ getOrder(plataforma.id, date).transportComments.substring(0, 20) }}..."
                 </div>
                 <div class="absolute bottom-1 left-1 text-green-700 font-bold max-w-[50%]">
                   <div class="flex flex-col">
-                    <span>Fab: {{ formatDate(getOrder(client.id, date).manufacturingDate) }}</span>
-                    <span class="text-[9px] font-normal text-green-600 truncate">{{ getOrder(client.id, date).manufacturingNotes }}</span>
+                    <span>Fab: {{ formatDate(getOrder(plataforma.id, date).manufacturingDate) }}</span>
+                    <span class="text-[9px] font-normal text-green-600 truncate">{{ getOrder(plataforma.id, date).manufacturingNotes }}</span>
                   </div>
                 </div>
                 <div class="absolute bottom-1 right-1 text-right text-orange-600 font-bold max-w-[50%]">
                   <div class="flex flex-col items-end">
                     <span class="text-[9px] text-gray-400">Carga</span>
-                    <span class="text-sm">{{ getDayOfWeek(getOrder(client.id, date).loadingDate) }} {{ formatDate(getOrder(client.id, date).loadingDate) }}</span>
+                    <span class="text-sm">{{ getDayOfWeek(getOrder(plataforma.id, date).loadingDate) }} {{ formatDate(getOrder(plataforma.id, date).loadingDate) }}</span>
                   </div>
                 </div>
               </template>
@@ -130,22 +134,22 @@ const ordersMap = computed(() => {
   const map = {}
   if (props.orders) {
     props.orders.forEach(o => {
-      if (!map[o.clientId]) map[o.clientId] = {}
-      map[o.clientId][o.date] = o
+      if (!map[o.plataforma_id]) map[o.plataforma_id] = {}
+      map[o.plataforma_id][o.fecha] = o
     })
   }
   return map
 })
 
 const isHoliday = (date) => {
-  if (!dataStore.holidays) return false
-  return dataStore.holidays.some(h => h.date === date)
+  if (!dataStore.festivos) return false
+  return dataStore.festivos.some(h => h.fecha === date)
 }
 
 const getHolidayName = (date) => {
-  if (!dataStore.holidays) return ''
-  const holiday = dataStore.holidays.find(h => h.date === date)
-  return holiday ? holiday.name : ''
+  if (!dataStore.festivos) return ''
+  const holiday = dataStore.festivos.find(h => h.fecha === date)
+  return holiday ? holiday.nombre : ''
 }
 
 const getOrder = (clientId, date) => {

@@ -1,61 +1,197 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { db, appId } from '@/lib/firebase'
-import { collection, onSnapshot } from 'firebase/firestore'
-import { useAuthStore } from './auth'
+import { ref } from 'vue'
+import { supabase } from '@/lib/supabase'
 
 export const useDataStore = defineStore('data', () => {
-  const authStore = useAuthStore()
+  // Estados reactivos
+  const plataformas = ref([])
+  const festivos = ref([])
+  const planesFestivos = ref([])
+  const entregas = ref([])
+  const loading = ref(false)
+  const error = ref(null)
 
-  const holidays = ref([])
-  const holidayPlans = ref([])
-  const orders = ref([])
-  const mockClients = ref([
-    { id: 'cli1', name: 'Mercadona Sur' },
-    { id: 'cli2', name: 'Día Central' },
-    { id: 'cli3', name: 'Carrefour Norte' },
-    { id: 'cli4', name: 'Alcampo Levante' },
-    { id: 'cli5', name: 'Lidl Regional' },
-  ])
+  // FUNCIÓN: Cargar plataformas activas
+  const loadPlataformas = async () => {
+    loading.value = true
+    try {
+      const { data, error: err } = await supabase
+        .from('plataformas')
+        .select('*')
+        .eq('activo', true)
+        .order('nombre', { ascending: true })
 
-  // Mock data for development - replace with actual Firebase listeners
-  const loadMockData = () => {
-    // Mock holidays
-    holidays.value = [
-      { id: 'h1', date: '2024-12-25', name: 'Navidad' },
-      { id: 'h2', date: '2024-12-31', name: 'Fin de Año' }
-    ]
-
-    // Mock holiday plans
-    holidayPlans.value = [
-      { id: 'p1', name: 'Puente Navidad', startDate: '2024-12-24', endDate: '2024-12-26' }
-    ]
-
-    // Mock orders
-    orders.value = [
-      {
-        id: 'o1',
-        clientId: 'cli1',
-        date: '2024-12-04',
-        delivers: true,
-        receptionDate: '2024-12-04',
-        receptionTime: '08:00',
-        transportCompany: 'Transportes Rápidos',
-        manufacturingDate: '2024-12-05',
-        manufacturingNotes: 'Urgente',
-        loadingDate: '2024-12-06',
-        transportComments: 'Entrega prioritaria'
-      }
-    ]
+      if (err) throw err
+      plataformas.value = data || []
+    } catch (e) {
+      error.value = e.message
+      console.error('Error cargando plataformas:', e)
+    } finally {
+      loading.value = false
+    }
   }
 
-  // Load mock data immediately
-  loadMockData()
+  // FUNCIÓN: Cargar festivos
+  const loadFestivos = async () => {
+    try {
+      const { data, error: err } = await supabase
+        .from('festivos')
+        .select('*')
+        .order('fecha', { ascending: true })
+
+      if (err) throw err
+      festivos.value = data || []
+    } catch (e) {
+      console.error('Error cargando festivos:', e)
+      // No fallar si la tabla no existe aún
+      festivos.value = []
+    }
+  }
+
+  // FUNCIÓN: Cargar planes de festivos
+  const loadPlanesFestivos = async () => {
+    try {
+      const { data, error: err } = await supabase
+        .from('planes_festivos')
+        .select('*')
+        .order('fecha_inicio', { ascending: true })
+
+      if (err) throw err
+      planesFestivos.value = data || []
+    } catch (e) {
+      console.error('Error cargando planes festivos:', e)
+      // No fallar si la tabla no existe aún
+      planesFestivos.value = []
+    }
+  }
+
+  // FUNCIÓN: Cargar entregas con información de plataforma
+  const loadEntregas = async () => {
+    try {
+      const { data, error: err } = await supabase
+        .from('entregas')
+        .select(`
+          *,
+          plataforma:plataformas(
+            id,
+            nombre,
+            cliente_nombre,
+            empresa_transporte
+          )
+        `)
+        .order('fecha', { ascending: true })
+
+      if (err) throw err
+      entregas.value = data || []
+    } catch (e) {
+      console.error('Error cargando entregas:', e)
+      // No fallar si la tabla no existe aún
+      entregas.value = []
+    }
+  }
+
+  // Real-time subscriptions
+  let subscriptions = []
+
+  const setupRealtimeSubscriptions = () => {
+    // Limpiar suscripciones existentes
+    cleanupSubscriptions()
+
+    // Plataformas
+    const plataformasChannel = supabase
+      .channel('plataformas-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'plataformas' },
+        () => {
+          console.log('Cambio detectado en plataformas, recargando...')
+          loadPlataformas()
+        }
+      )
+      .subscribe()
+
+    // Festivos
+    const festivosChannel = supabase
+      .channel('festivos-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'festivos' },
+        () => {
+          console.log('Cambio detectado en festivos, recargando...')
+          loadFestivos()
+        }
+      )
+      .subscribe()
+
+    // Planes festivos
+    const planesChannel = supabase
+      .channel('planes-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'planes_festivos' },
+        () => {
+          console.log('Cambio detectado en planes festivos, recargando...')
+          loadPlanesFestivos()
+        }
+      )
+      .subscribe()
+
+    // Entregas
+    const entregasChannel = supabase
+      .channel('entregas-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'entregas' },
+        () => {
+          console.log('Cambio detectado en entregas, recargando...')
+          loadEntregas()
+        }
+      )
+      .subscribe()
+
+    subscriptions = [plataformasChannel, festivosChannel, planesChannel, entregasChannel]
+  }
+
+  const cleanupSubscriptions = () => {
+    subscriptions.forEach(sub => {
+      try {
+        supabase.removeChannel(sub)
+      } catch (e) {
+        console.error('Error limpiando suscripción:', e)
+      }
+    })
+    subscriptions = []
+  }
+
+  // Inicialización
+  const initialize = async () => {
+    console.log('Inicializando data store con Supabase...')
+    try {
+      await Promise.all([
+        loadPlataformas(),
+        loadFestivos(),
+        loadPlanesFestivos(),
+        loadEntregas()
+      ])
+      setupRealtimeSubscriptions()
+      console.log('Data store inicializado correctamente')
+    } catch (e) {
+      console.error('Error inicializando data store:', e)
+      error.value = e.message
+    }
+  }
 
   return {
-    holidays,
-    holidayPlans,
-    orders,
-    mockClients
+    // State
+    plataformas,
+    festivos,
+    planesFestivos,
+    entregas,
+    loading,
+    error,
+
+    // Actions
+    initialize,
+    loadPlataformas,
+    loadFestivos,
+    loadPlanesFestivos,
+    loadEntregas,
+    cleanupSubscriptions
   }
 })

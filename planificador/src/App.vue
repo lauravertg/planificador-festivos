@@ -4,8 +4,7 @@ import { Truck, Calendar, FileText, Settings } from 'lucide-vue-next'
 import { addDays, getTodayStr } from './utils/date'
 import { useAuthStore } from './stores/auth'
 import { useDataStore } from './stores/data'
-import { db, appId } from './lib/firebase'
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
+import { supabase } from './lib/supabase'
 
 import DateRangeSelector from './features/board/DateRangeSelector.vue'
 import BoardView from './features/board/BoardView.vue'
@@ -17,7 +16,11 @@ const authStore = useAuthStore()
 const dataStore = useDataStore()
 
 const { user, loading } = authStore
-// const { orders, mockClients } = dataStore
+
+// Inicializar el store al montar
+onMounted(async () => {
+  await dataStore.initialize()
+})
 
 // Estado de la vista
 const view = ref('board')
@@ -32,21 +35,21 @@ const dateRange = ref({
 const editorOpen = ref(false)
 const editingCell = ref(null)
 
-// Filtrar órdenes por rango de fechas
+// Filtrar entregas por rango de fechas
 const filteredOrders = computed(() => {
-  if (!dataStore.orders) return []
-  return dataStore.orders.filter(o => o.date >= dateRange.value.start && o.date <= dateRange.value.end)
+  if (!dataStore.entregas) return []
+  return dataStore.entregas.filter(o => o.fecha >= dateRange.value.start && o.fecha <= dateRange.value.end)
 })
 
 // Manejadores
 const handleCellClick = ({ clientId, date }) => {
-  const existing = filteredOrders.value.find(o => o.clientId === clientId && o.date === date)
-  const client = mockClients.value.find(c => c.id === clientId)
+  const existing = filteredOrders.value.find(o => o.plataforma_id === clientId && o.fecha === date)
+  const plataforma = dataStore.plataformas.find(p => p.id === clientId)
 
   editingCell.value = {
     clientId,
     dateStr: date,
-    clientName: client?.name || 'Cliente (API Pendiente)',
+    clientName: plataforma?.nombre || 'Plataforma',
     data: existing
   }
   editorOpen.value = true
@@ -56,28 +59,59 @@ const handleSaveCell = async (formData) => {
   const { clientId, dateStr, data } = editingCell.value
   const isDelete = formData.delete
 
-  if (isDelete && data && data.id) {
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', data.id))
-    editorOpen.value = false
-    return
-  }
+  try {
+    if (isDelete && data && data.id) {
+      // Eliminar entrega
+      const { error } = await supabase
+        .from('entregas')
+        .delete()
+        .eq('id', data.id)
 
-  const payload = {
-    ...formData,
-    clientId,
-    date: dateStr,
-    updatedAt: new Date().toISOString()
-  }
-  delete payload.delete
-
-  if (data && data.id) {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', data.id), payload)
-  } else {
-    if (payload.delivers) {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), payload)
+      if (error) throw error
+      await dataStore.loadEntregas()
+      editorOpen.value = false
+      return
     }
+
+    // Mapear campos de inglés a español
+    const payload = {
+      plataforma_id: clientId,
+      fecha: dateStr,
+      entrega: formData.delivers,
+      fecha_recepcion: formData.receptionDate,
+      hora_recepcion: formData.receptionTime,
+      empresa_transporte: formData.transportCompany,
+      fecha_fabricacion: formData.manufacturingDate,
+      notas_fabricacion: formData.manufacturingNotes,
+      fecha_carga: formData.loadingDate,
+      comentarios_transporte: formData.transportComments
+    }
+
+    if (data && data.id) {
+      // Actualizar entrega existente
+      const { error } = await supabase
+        .from('entregas')
+        .update(payload)
+        .eq('id', data.id)
+
+      if (error) throw error
+    } else {
+      // Crear nueva entrega (solo si es una entrega, no NO ENTREGA)
+      if (payload.entrega) {
+        const { error } = await supabase
+          .from('entregas')
+          .insert(payload)
+
+        if (error) throw error
+      }
+    }
+
+    await dataStore.loadEntregas()
+    editorOpen.value = false
+  } catch (error) {
+    console.error('Error guardando entrega:', error)
+    alert('Error al guardar: ' + error.message)
   }
-  editorOpen.value = false
 }
 
 const closeEditor = () => {
@@ -86,10 +120,6 @@ const closeEditor = () => {
 
 const closeConfig = () => {
   view.value = 'board'
-}
-
-if (loading.value) {
-  // Loading state
 }
 </script>
 

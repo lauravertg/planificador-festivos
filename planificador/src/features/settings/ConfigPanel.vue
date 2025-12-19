@@ -47,9 +47,9 @@
           >
             <div class="flex items-center gap-4">
               <div class="bg-red-100 text-red-800 font-bold px-3 py-1 rounded text-sm border border-red-200">
-                {{ formatDate(h.date) }}
+                {{ formatDate(h.fecha) }}
               </div>
-              <span class="font-bold">{{ h.name }}</span>
+              <span class="font-bold">{{ h.nombre }}</span>
             </div>
             <button @click="handleDeleteHoliday(h.id)" class="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50">
               <Trash2 size="16" />
@@ -95,12 +95,24 @@
           </div>
 
           <div class="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-            <p class="text-sm font-bold text-blue-700 mb-1">Rango Seleccionado:</p>
-            <p class="text-sm">
-              {{ selectedRange.start ? formatDate(selectedRange.start) : '??/??' }}
-              <ArrowRight size="14" class="inline mx-2 text-blue-500" />
-              {{ selectedRange.end ? formatDate(selectedRange.end) : '??/??' }}
-            </p>
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <p class="text-sm font-bold text-blue-700 mb-1">Rango Seleccionado:</p>
+                <p class="text-sm">
+                  {{ selectedRange.start ? formatDate(selectedRange.start) : '??/??' }}
+                  <ArrowRight size="14" class="inline mx-2 text-blue-500" />
+                  {{ selectedRange.end ? formatDate(selectedRange.end) : '??/??' }}
+                </p>
+              </div>
+              <button
+                v-if="selectedRange.start || selectedRange.end"
+                @click="clearSelection"
+                class="text-xs text-red-600 hover:text-red-800 underline ml-2"
+                title="Limpiar selección"
+              >
+                Limpiar
+              </button>
+            </div>
           </div>
 
           <!-- GUARDAR PLAN -->
@@ -132,9 +144,9 @@
           >
             <div class="flex items-center gap-4">
               <div class="bg-blue-100 text-blue-800 font-bold px-3 py-1 rounded text-sm border border-blue-200">
-                {{ formatDate(p.startDate) }} - {{ formatDate(p.endDate) }}
+                {{ formatDate(p.fecha_inicio) }} - {{ formatDate(p.fecha_fin) }}
               </div>
-              <span class="font-bold">{{ p.name }}</span>
+              <span class="font-bold">{{ p.nombre }}</span>
             </div>
             <button @click="handleDeletePlan(p.id)" class="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50">
               <Trash2 size="16" />
@@ -150,8 +162,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Settings, X, Plus, ChevronLeft, ChevronRight, FileText, Trash2, ArrowRight, AlertCircle, CornerDownRight } from 'lucide-vue-next'
 import { formatDate } from '@/utils/date'
-import { db, appId } from '@/lib/firebase'
-import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore'
+import { supabase } from '@/lib/supabase'
 import { useDataStore } from '@/stores/data'
 
 const emit = defineEmits(['close'])
@@ -171,11 +182,11 @@ const newPlanName = ref('')
 
 const sortedHolidays = computed(() => {
   if (!holidays.value) return []
-  return holidays.value.sort((a, b) => a.date.localeCompare(b.date))
+  return holidays.value.sort((a, b) => a.fecha.localeCompare(b.fecha))
 })
 const sortedPlans = computed(() => {
   if (!holidayPlans.value) return []
-  return holidayPlans.value.sort((a, b) => a.startDate.localeCompare(b.startDate))
+  return holidayPlans.value.sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
 })
 
 const getDaysInMonth = (year, month) => {
@@ -207,7 +218,7 @@ const calendarDays = computed(() => {
     const rangeEnd = selectedRange.value.start < selectedRange.value.end ? selectedRange.value.end : selectedRange.value.start
     const isBetween = rangeStart && rangeEnd && dateStr > rangeStart && dateStr < rangeEnd
 
-    const isFixedHoliday = holidays.value ? holidays.value.some(h => h.date === dateStr) : false
+    const isFixedHoliday = holidays.value ? holidays.value.some(h => h.fecha === dateStr) : false
     const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6
 
     days.push({
@@ -263,44 +274,83 @@ const handleDateClick = (dateStr) => {
 
 const changeMonth = (delta) => {
   calendarDate.value = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth() + delta, 1)
+  // ✅ Permitir selección multi-mes - no borrar la selección al cambiar de mes
+}
+
+const clearSelection = () => {
   selectedRange.value = { start: null, end: null }
 }
 
 const handleAddHoliday = async () => {
   if (!newHolidayName.value.trim() || !newHolidayDate.value) return
 
-  await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'holidays'), {
-    name: newHolidayName.value,
-    date: newHolidayDate.value,
-    createdAt: new Date().toISOString()
-  })
-  newHolidayName.value = ''
-  newHolidayDate.value = ''
+  const { error } = await supabase
+    .from('festivos')
+    .insert({
+      nombre: newHolidayName.value,
+      fecha: newHolidayDate.value
+    })
+
+  if (error) {
+    console.error('Error añadiendo festivo:', error)
+    alert('Error al guardar el festivo: ' + error.message)
+  } else {
+    newHolidayName.value = ''
+    newHolidayDate.value = ''
+    await dataStore.loadFestivos()
+  }
 }
 
 const handleDeleteHoliday = async (id) => {
   if (confirm('¿Borrar este festivo de la lista?')) {
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'holidays', id))
+    const { error } = await supabase
+      .from('festivos')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error eliminando festivo:', error)
+      alert('Error al eliminar el festivo: ' + error.message)
+    } else {
+      await dataStore.loadFestivos()
+    }
   }
 }
 
 const handleAddPlan = async () => {
   if (!selectedRange.value.start || !selectedRange.value.end || !newPlanName.value.trim()) return
 
-  await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'holiday_plans'), {
-    name: newPlanName.value.trim(),
-    startDate: selectedRange.value.start,
-    endDate: selectedRange.value.end,
-    createdAt: new Date().toISOString()
-  })
+  const { error } = await supabase
+    .from('planes_festivos')
+    .insert({
+      nombre: newPlanName.value.trim(),
+      fecha_inicio: selectedRange.value.start,
+      fecha_fin: selectedRange.value.end
+    })
 
-  newPlanName.value = ''
-  selectedRange.value = { start: null, end: null }
+  if (error) {
+    console.error('Error añadiendo plan:', error)
+    alert('Error al guardar el plan: ' + error.message)
+  } else {
+    newPlanName.value = ''
+    selectedRange.value = { start: null, end: null }
+    await dataStore.loadPlanesFestivos()
+  }
 }
 
 const handleDeletePlan = async (id) => {
   if (confirm('¿Borrar este plan de festivo?')) {
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'holiday_plans', id))
+    const { error } = await supabase
+      .from('planes_festivos')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error eliminando plan:', error)
+      alert('Error al eliminar el plan: ' + error.message)
+    } else {
+      await dataStore.loadPlanesFestivos()
+    }
   }
 }
 </script>

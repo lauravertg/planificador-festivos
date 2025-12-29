@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 
 export const useDataStore = defineStore('data', () => {
@@ -21,11 +21,16 @@ export const useDataStore = defineStore('data', () => {
         .eq('activo', true)
         .order('nombre', { ascending: true })
 
-      if (err) throw err
+      if (err) {
+        console.error('Error cargando plataformas:', err)
+        plataformas.value = []
+        return
+      }
       plataformas.value = data || []
     } catch (e) {
       error.value = e.message
       console.error('Error cargando plataformas:', e)
+      plataformas.value = []
     } finally {
       loading.value = false
     }
@@ -39,7 +44,11 @@ export const useDataStore = defineStore('data', () => {
         .select('*')
         .order('fecha', { ascending: true })
 
-      if (err) throw err
+      if (err) {
+        console.error('Error cargando festivos:', err)
+        festivos.value = []
+        return
+      }
       festivos.value = data || []
     } catch (e) {
       console.error('Error cargando festivos:', e)
@@ -56,7 +65,11 @@ export const useDataStore = defineStore('data', () => {
         .select('*')
         .order('fecha_inicio', { ascending: true })
 
-      if (err) throw err
+      if (err) {
+        console.error('Error cargando planes festivos:', err)
+        planesFestivos.value = []
+        return
+      }
       planesFestivos.value = data || []
     } catch (e) {
       console.error('Error cargando planes festivos:', e)
@@ -68,11 +81,12 @@ export const useDataStore = defineStore('data', () => {
   // FUNCIÓN: Cargar entregas con información de plataforma
   const loadEntregas = async () => {
     try {
+      // Primero intentamos cargar con JOIN
       const { data, error: err } = await supabase
         .from('entregas')
         .select(`
           *,
-          plataforma:plataformas(
+          plataforma:plataformas!plataforma_id(
             id,
             nombre,
             cliente_nombre,
@@ -81,7 +95,38 @@ export const useDataStore = defineStore('data', () => {
         `)
         .order('fecha', { ascending: true })
 
-      if (err) throw err
+      if (err) {
+        console.error('Error cargando entregas con JOIN:', err)
+        // Si falla el JOIN, intentar sin él
+        const { data: simpleData, error: simpleErr } = await supabase
+          .from('entregas')
+          .select('*')
+          .order('fecha', { ascending: true })
+
+        if (simpleErr) {
+          console.error('Error cargando entregas:', simpleErr)
+          entregas.value = []
+          return
+        }
+
+        // Enriquecer manualmente con datos de plataforma
+        const enrichedData = simpleData.map(entrega => {
+          const plat = plataformas.value.find(p => p.id === entrega.plataforma_id)
+          return {
+            ...entrega,
+            plataforma: plat ? {
+              id: plat.id,
+              nombre: plat.nombre,
+              cliente_nombre: plat.cliente_nombre,
+              empresa_transporte: plat.empresa_transporte
+            } : null
+          }
+        })
+
+        entregas.value = enrichedData
+        return
+      }
+
       entregas.value = data || []
     } catch (e) {
       console.error('Error cargando entregas:', e)
@@ -177,6 +222,16 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
+  // COMPUTED: Obtener empresas de transporte únicas
+  const empresasTransporte = computed(() => {
+    const empresas = plataformas.value
+      .map(p => p.empresa_transporte)
+      .filter(e => e && e.trim() !== '')
+
+    // Eliminar duplicados y ordenar
+    return [...new Set(empresas)].sort()
+  })
+
   return {
     // State
     plataformas,
@@ -185,6 +240,9 @@ export const useDataStore = defineStore('data', () => {
     entregas,
     loading,
     error,
+
+    // Computed
+    empresasTransporte,
 
     // Actions
     initialize,

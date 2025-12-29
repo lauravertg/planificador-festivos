@@ -31,9 +31,22 @@
 - `holidays` → `festivos`
 - Muestra `cliente_nombre` debajo del nombre de plataforma
 
+### 6. CellEditor Actualizado ✅
+- **Archivo**: `src/features/board/CellEditor.vue`
+- Mapeo automático de campos Supabase (español) → formData (inglés)
+- Manejo correcto de datos existentes vs. nuevos registros
+
+### 7. ReportsView Actualizado ✅
+- **Archivo**: `src/features/reports/ReportsView.vue`
+- Usa `festivos` en lugar de `holidays`
+- Aprovecha el join de Supabase: `order.plataforma.nombre`
+- Todos los campos mapeados correctamente
+
 ---
 
 ## 📋 Pasos Pendientes (Debes Completar)
+
+> **NOTA**: Los pasos 3, 4 y 5 de la lista original ya están completados. Solo quedan configuración y testing.
 
 ### Paso 1: Configurar Credenciales de Supabase
 
@@ -76,79 +89,7 @@
    ```
    Deberías ver las 3 tablas.
 
-### Paso 3: Actualizar CellEditor.vue (PENDIENTE)
-
-Este archivo necesita actualización manual. Aquí está el mapeo de campos:
-
-**En `src/features/board/CellEditor.vue`**, busca y reemplaza:
-
-```javascript
-// CAMPOS EN FORMDATA (se mantienen en inglés para compatibilidad interna)
-// Pero al guardar en Supabase, deben mapearse así:
-
-const payload = {
-  plataforma_id: props.clientId,        // era clientId
-  fecha: props.date,                    // era date
-  entrega: formData.delivers,           // era delivers
-  fecha_recepcion: formData.receptionDate,
-  hora_recepcion: formData.receptionTime,
-  empresa_transporte: formData.transportCompany,
-  fecha_fabricacion: formData.manufacturingDate,
-  notas_fabricacion: formData.manufacturingNotes,
-  fecha_carga: formData.loadingDate,
-  comentarios_transporte: formData.transportComments
-}
-
-// Al leer datos existentes, los campos vienen en español:
-if (props.data) {
-  formData.delivers = props.data.entrega  // no props.data.delivers
-  formData.receptionDate = props.data.fecha_recepcion
-  // etc...
-}
-```
-
-### Paso 4: Actualizar ReportsView.vue (PENDIENTE)
-
-**En `src/features/reports/ReportsView.vue`**:
-
-1. Cambiar referencias a campos:
-   ```javascript
-   // ANTES
-   order.clientId → order.plataforma_id
-   order.date → order.fecha
-   order.delivers → order.entrega
-
-   // Nombres de plataformas (si hace lookup):
-   dataStore.mockClients → dataStore.plataformas
-   client.name → plataforma.nombre
-   ```
-
-2. **Mejor opción**: Usar el join que ya viene del store:
-   ```javascript
-   // Las entregas ya tienen la información de plataforma incluida
-   order.plataforma.nombre           // Nombre de la plataforma
-   order.plataforma.cliente_nombre   // Nombre del cliente
-   ```
-
-### Paso 5: Limpiar Firebase (OPCIONAL pero Recomendado)
-
-1. **Eliminar archivo Firebase**:
-   ```bash
-   rm src/lib/firebase.js
-   ```
-
-2. **Desinstalar dependencias Firebase** (opcional):
-   ```bash
-   npm uninstall firebase
-   ```
-
-3. **Buscar imports residuales**:
-   ```bash
-   grep -r "from.*firebase" src/
-   grep -r "from.*firestore" src/
-   ```
-
-### Paso 6: Probar la Aplicación
+### Paso 3: Probar la Aplicación
 
 1. **Inicia el servidor de desarrollo**:
    ```bash

@@ -86,26 +86,34 @@ const props = defineProps({
 })
 
 const dataStore = useDataStore()
-const { holidays } = dataStore
+const { festivos } = dataStore
 
 const selectedTransport = ref('all')
 
 const reportData = computed(() => {
   if (!props.orders.length) return []
 
-  let filtered = props.orders.filter(o => o.delivers && o.transportCompany)
+  // Filtrar: solo entregas con empresa de transporte
+  let filtered = props.orders.filter(o => o.entrega && o.empresa_transporte)
 
   if (selectedTransport.value !== 'all') {
-    filtered = filtered.filter(o => o.transportCompany === selectedTransport.value)
+    filtered = filtered.filter(o => o.empresa_transporte === selectedTransport.value)
   }
 
   const grouped = {}
   filtered.forEach(order => {
-    const loadDate = order.loadingDate || 'Sin fecha de carga'
+    const loadDate = order.fecha_carga || 'Sin fecha de carga'
     if (!grouped[loadDate]) grouped[loadDate] = []
+
+    // Mapear campos de Supabase (español) a formato de reporte (inglés para compatibilidad con template)
     grouped[loadDate].push({
-      ...order,
-      clientName: 'Cliente (API Pendiente)'
+      id: order.id,
+      clientName: order.plataforma?.nombre || 'Plataforma',
+      transportCompany: order.empresa_transporte,
+      receptionDate: order.fecha_recepcion,
+      receptionTime: order.hora_recepcion,
+      transportComments: order.comentarios_transporte,
+      manufacturingNotes: order.notas_fabricacion
     })
   })
 
@@ -116,7 +124,8 @@ const reportData = computed(() => {
 })
 
 const isHolidayLoad = (date) => {
-  return holidays.value.some(h => h.date === date)
+  if (!festivos.value) return false
+  return festivos.value.some(h => h.fecha === date)
 }
 
 const printReport = () => {

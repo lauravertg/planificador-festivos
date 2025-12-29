@@ -55,10 +55,13 @@
                   v-model="formData.transportCompany"
                 >
                   <option value="">-- Seleccionar Compañía --</option>
-                  <option value="Innova">Innova</option>
-                  <option value="Primafrío">Primafrío</option>
-                  <option value="Disfrimur">Disfrimur</option>
-                  <option value="Otros">Otros</option>
+                  <option
+                    v-for="company in availableTransportCompanies"
+                    :key="company"
+                    :value="company"
+                  >
+                    {{ company }}
+                  </option>
                 </select>
                 <textarea
                   placeholder="Comentarios para el transportista..."
@@ -99,25 +102,60 @@
               <input
                 type="date"
                 class="border p-2 rounded text-sm w-full"
+                :class="{ 'border-red-500 bg-red-50': isLoadingDateInvalid }"
                 v-model="formData.loadingDate"
               />
+              <p v-if="isLoadingDateInvalid" class="text-red-600 text-xs mt-1 font-medium">
+                ⚠️ La fecha de carga no puede ser anterior a la fecha de fabricación
+              </p>
             </div>
           </template>
         </div>
 
-        <div class="p-4 border-t flex justify-between gap-2 bg-gray-50">
-          <button
-            v-if="data && data.id"
-            @click="confirmDelete"
-            class="px-4 py-2 text-red-600 border border-red-200 rounded hover:bg-red-50 flex items-center gap-2"
-          >
-            <Trash2 size="18" /> Borrar
-          </button>
-          <div class="flex gap-2">
-            <button @click="$emit('close')" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded">Cancelar</button>
-            <button @click="handleSubmit" class="px-6 py-2 bg-blue-600 text-white rounded font-medium shadow hover:bg-blue-700 flex items-center gap-2">
-              <Save size="18" /> Guardar
+        <div class="p-4 border-t bg-gray-50 space-y-2">
+          <!-- Botones de copiar/pegar -->
+          <div class="flex gap-2 pb-2 border-b">
+            <button
+              @click="handleCopy"
+              class="flex-1 px-3 py-2 text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 flex items-center justify-center gap-2 transition-colors"
+              :disabled="!formData.delivers"
+            >
+              <Copy size="16" /> Copiar
             </button>
+            <button
+              @click="handlePaste"
+              class="flex-1 px-3 py-2 text-purple-600 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100 flex items-center justify-center gap-2 transition-colors"
+              :disabled="!hasClipboard"
+              :class="{ 'opacity-50 cursor-not-allowed': !hasClipboard }"
+            >
+              <Clipboard size="16" /> Pegar
+            </button>
+          </div>
+
+          <!-- Botones principales -->
+          <div class="flex justify-between gap-2">
+            <button
+              v-if="data && data.id"
+              @click="confirmDelete"
+              class="px-4 py-2 text-red-600 border border-red-200 rounded hover:bg-red-50 flex items-center gap-2"
+            >
+              <Trash2 size="18" /> Borrar
+            </button>
+            <div class="flex gap-2 ml-auto">
+              <button @click="$emit('close')" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded">Cancelar</button>
+              <button
+                @click="handleSubmit"
+                :disabled="!!validationError"
+                :class="[
+                  'px-6 py-2 rounded font-medium shadow flex items-center gap-2 transition-colors',
+                  validationError
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                ]"
+              >
+                <Save size="18" /> Guardar
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -126,18 +164,28 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
-import { Calendar, Truck, Factory, Clock, Save, X, Trash2 } from 'lucide-vue-next'
+import { ref, watch, computed } from 'vue'
+import { Calendar, Truck, Factory, Clock, Save, X, Trash2, Copy, Clipboard } from 'lucide-vue-next'
 import { formatDate, getDayOfWeek } from '@/utils/date'
+import { useDataStore } from '@/stores/data'
 
 const props = defineProps({
   isOpen: Boolean,
   data: Object,
   clientName: String,
-  dateStr: String
+  dateStr: String,
+  plataforma: Object,
+  hasClipboard: Boolean
 })
 
-const emit = defineEmits(['close', 'save'])
+const emit = defineEmits(['close', 'save', 'copy', 'paste'])
+
+const dataStore = useDataStore()
+
+// Computed: Obtener empresas de transporte únicas desde el store
+const availableTransportCompanies = computed(() => {
+  return dataStore.empresasTransporte
+})
 
 const formData = ref({
   delivers: true,
@@ -147,26 +195,71 @@ const formData = ref({
   manufacturingNotes: '',
   loadingDate: '',
   transportCompany: '',
-  transportComments: '',
-  ...props.data
+  transportComments: ''
 })
 
-watch(() => props.data, (newData) => {
-  formData.value = {
-    delivers: true,
-    receptionDate: props.dateStr,
-    receptionTime: '',
-    manufacturingDate: '',
-    manufacturingNotes: '',
-    loadingDate: '',
-    transportCompany: '',
-    transportComments: '',
-    ...newData
+watch(() => [props.data, props.plataforma], ([newData, plataforma]) => {
+  if (newData) {
+    // Mapear campos de Supabase (español) a formData (inglés)
+    formData.value = {
+      delivers: newData.entrega ?? true,
+      receptionDate: newData.fecha_recepcion || props.dateStr,
+      receptionTime: newData.hora_recepcion || '',
+      manufacturingDate: newData.fecha_fabricacion || '',
+      manufacturingNotes: newData.notas_fabricacion || '',
+      loadingDate: newData.fecha_carga || '',
+      transportCompany: newData.empresa_transporte || '',
+      transportComments: newData.comentarios_transporte || ''
+    }
+  } else {
+    // Valores por defecto para nuevo registro
+    // Pre-seleccionar la empresa de transporte de la plataforma
+    const defaultTransportCompany = plataforma?.empresa_transporte || ''
+
+    formData.value = {
+      delivers: true,
+      receptionDate: props.dateStr,
+      receptionTime: '',
+      manufacturingDate: '',
+      manufacturingNotes: '',
+      loadingDate: '',
+      transportCompany: defaultTransportCompany,
+      transportComments: ''
+    }
   }
 }, { immediate: true })
 
+// Validación: fecha de carga no puede ser anterior a fecha de fabricación
+const isLoadingDateInvalid = computed(() => {
+  if (!formData.value.delivers) return false
+  if (!formData.value.manufacturingDate || !formData.value.loadingDate) return false
+
+  return new Date(formData.value.loadingDate) < new Date(formData.value.manufacturingDate)
+})
+
+const validationError = computed(() => {
+  if (isLoadingDateInvalid.value) {
+    return 'La fecha de carga no puede ser anterior a la fecha de fabricación'
+  }
+  return null
+})
+
 const handleSubmit = () => {
+  // Validar antes de guardar
+  if (validationError.value) {
+    alert(validationError.value)
+    return
+  }
+
   emit('save', formData.value)
+}
+
+const handleCopy = () => {
+  emit('copy', formData.value)
+}
+
+const handlePaste = () => {
+  emit('paste')
 }
 
 const confirmDelete = () => {

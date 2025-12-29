@@ -5,6 +5,27 @@
 -- Ejecutar en el SQL Editor de Supabase
 
 -- ============================================
+-- TABLA: plataformas
+-- ============================================
+CREATE TABLE IF NOT EXISTS plataformas (
+  id BIGSERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  cliente_nombre TEXT,
+  empresa_transporte TEXT,
+  activo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plataformas_activo ON plataformas(activo);
+CREATE INDEX IF NOT EXISTS idx_plataformas_nombre ON plataformas(nombre);
+
+COMMENT ON TABLE plataformas IS 'Plataformas/clientes del sistema';
+COMMENT ON COLUMN plataformas.nombre IS 'Nombre de la plataforma';
+COMMENT ON COLUMN plataformas.cliente_nombre IS 'Nombre del cliente asociado';
+COMMENT ON COLUMN plataformas.empresa_transporte IS 'Empresa de transporte predeterminada';
+COMMENT ON COLUMN plataformas.activo IS 'true = plataforma activa, false = inactiva';
+
+-- ============================================
 -- TABLA: festivos
 -- ============================================
 CREATE TABLE IF NOT EXISTS festivos (
@@ -43,6 +64,7 @@ COMMENT ON COLUMN planes_festivos.fecha_fin IS 'Fecha de fin del rango';
 -- ============================================
 CREATE TABLE IF NOT EXISTS entregas (
   id BIGSERIAL PRIMARY KEY,
+  plan_id BIGINT REFERENCES planes_festivos(id) ON DELETE CASCADE,
   plataforma_id BIGINT NOT NULL REFERENCES plataformas(id) ON DELETE CASCADE,
   fecha DATE NOT NULL,
   entrega BOOLEAN NOT NULL DEFAULT true,
@@ -57,11 +79,13 @@ CREATE TABLE IF NOT EXISTS entregas (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_entregas_plan ON entregas(plan_id);
 CREATE INDEX IF NOT EXISTS idx_entregas_plataforma ON entregas(plataforma_id);
 CREATE INDEX IF NOT EXISTS idx_entregas_fecha ON entregas(fecha);
 CREATE INDEX IF NOT EXISTS idx_entregas_plataforma_fecha ON entregas(plataforma_id, fecha);
 
 COMMENT ON TABLE entregas IS 'Registro de entregas por plataforma y fecha';
+COMMENT ON COLUMN entregas.plan_id IS 'Plan festivo al que pertenece esta entrega (opcional)';
 COMMENT ON COLUMN entregas.plataforma_id IS 'Referencia a la plataforma/cliente';
 COMMENT ON COLUMN entregas.fecha IS 'Fecha de la entrega';
 COMMENT ON COLUMN entregas.entrega IS 'true = entrega, false = NO ENTREGA';
@@ -107,11 +131,23 @@ CREATE TRIGGER update_entregas_updated_at
 -- ============================================
 -- Descomenta para insertar datos de ejemplo
 
+-- Plataformas de ejemplo
+-- INSERT INTO plataformas (nombre, cliente_nombre, empresa_transporte, activo) VALUES
+--   ('Aldi Masquefa', 'Aldi', 'Innova', true),
+--   ('Aldi Sagunto', 'Aldi', 'Innova', true),
+--   ('ANTICH SPANISH FOOD, S.L.', 'Antich', 'Primafrío', true),
+--   ('Costco Torija', 'Costco', 'Disfrimur', true),
+--   ('ECI Mercamadrid', 'El Corte Inglés', 'Otros', true),
+--   ('Family', 'Family', 'Innova', true),
+--   ('Grupo más', 'Grupo más', 'Primafrío', true);
+
+-- Festivos de ejemplo
 -- INSERT INTO festivos (nombre, fecha) VALUES
 --   ('Navidad', '2024-12-25'),
 --   ('Año Nuevo', '2025-01-01'),
 --   ('Reyes', '2025-01-06');
 
+-- Planes de festivos de ejemplo
 -- INSERT INTO planes_festivos (nombre, fecha_inicio, fecha_fin) VALUES
 --   ('Puente Navidad', '2024-12-24', '2024-12-26'),
 --   ('Puente Año Nuevo', '2024-12-31', '2025-01-02');
@@ -119,6 +155,8 @@ CREATE TRIGGER update_entregas_updated_at
 -- ============================================
 -- VERIFICACIÓN
 -- ============================================
+-- Verifica que todas las tablas fueron creadas correctamente
 -- SELECT table_name FROM information_schema.tables
 -- WHERE table_schema = 'public'
--- AND table_name IN ('festivos', 'planes_festivos', 'entregas');
+-- AND table_name IN ('plataformas', 'festivos', 'planes_festivos', 'entregas')
+-- ORDER BY table_name;

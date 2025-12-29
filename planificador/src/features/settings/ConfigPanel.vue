@@ -39,7 +39,7 @@
           </button>
         </div>
         <div class="space-y-2 max-h-80 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-          <p v-if="holidays.length === 0" class="text-center text-gray-500 italic">No hay festivos individuales configurados.</p>
+          <p v-if="sortedHolidays.length === 0" class="text-center text-gray-500 italic">No hay festivos individuales configurados.</p>
           <div
             v-for="h in sortedHolidays"
             :key="h.id"
@@ -136,7 +136,7 @@
 
         <!-- LISTA DE PLANES GUARDADOS -->
         <div class="space-y-2 max-h-48 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-          <p v-if="dataStore.holidayPlans.length === 0" class="text-center text-gray-500 italic">No hay planes de festivos guardados.</p>
+          <p v-if="dataStore.planesFestivos.length === 0" class="text-center text-gray-500 italic">No hay planes de festivos guardados.</p>
           <div
             v-for="p in sortedPlans"
             :key="p.id"
@@ -159,8 +159,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { Settings, X, Plus, ChevronLeft, ChevronRight, FileText, Trash2, ArrowRight, AlertCircle, CornerDownRight } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
+import { Settings, X, Plus, ChevronLeft, ChevronRight, Trash2, ArrowRight, AlertCircle, CornerDownRight } from 'lucide-vue-next'
 import { formatDate } from '@/utils/date'
 import { supabase } from '@/lib/supabase'
 import { useDataStore } from '@/stores/data'
@@ -168,8 +168,6 @@ import { useDataStore } from '@/stores/data'
 const emit = defineEmits(['close'])
 
 const dataStore = useDataStore()
-const holidays = dataStore.holidays
-const holidayPlans = dataStore.holidayPlans
 
 // Estados para festivos
 const newHolidayName = ref('')
@@ -181,12 +179,12 @@ const selectedRange = ref({ start: null, end: null })
 const newPlanName = ref('')
 
 const sortedHolidays = computed(() => {
-  if (!holidays.value) return []
-  return holidays.value.sort((a, b) => a.fecha.localeCompare(b.fecha))
+  if (!dataStore.festivos) return []
+  return [...dataStore.festivos].sort((a, b) => a.fecha.localeCompare(b.fecha))
 })
 const sortedPlans = computed(() => {
-  if (!holidayPlans.value) return []
-  return holidayPlans.value.sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
+  if (!dataStore.planesFestivos) return []
+  return [...dataStore.planesFestivos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
 })
 
 const getDaysInMonth = (year, month) => {
@@ -218,7 +216,7 @@ const calendarDays = computed(() => {
     const rangeEnd = selectedRange.value.start < selectedRange.value.end ? selectedRange.value.end : selectedRange.value.start
     const isBetween = rangeStart && rangeEnd && dateStr > rangeStart && dateStr < rangeEnd
 
-    const isFixedHoliday = holidays.value ? holidays.value.some(h => h.fecha === dateStr) : false
+    const isFixedHoliday = dataStore.festivos ? dataStore.festivos.some(h => h.fecha === dateStr) : false
     const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6
 
     days.push({

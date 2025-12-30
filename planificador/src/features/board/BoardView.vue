@@ -63,7 +63,10 @@ initAuth	@	auth.js:14
           <!-- Columna Cliente -->
           <td class="sticky left-0 z-10 bg-white border-r border-b border-gray-300 p-3 font-medium text-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
             <div>{{ plataforma.nombre }}</div>
-            <div v-if="plataforma.cliente_nombre" class="text-xs text-gray-500">{{ plataforma.cliente_nombre }}</div>
+            <div v-if="plataforma.cliente_nombre" class="text-xs text-gray-500">
+              {{ plataforma.cliente_nombre }}
+              <div v-if="plataforma.tipo_carga" class="text-xs text-gray-400 mt-0.5">{{ plataforma.tipo_carga }}</div>
+            </div>
           </td>
 
           <!-- Celdas de Días -->

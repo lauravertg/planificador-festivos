@@ -48,6 +48,22 @@ watch(selectedPlanId, (newPlanId) => {
   }
 })
 
+// Actualizar el rango de fechas cuando se modifican las fechas del plan seleccionado
+watch(() => dataStore.planesFestivos, () => {
+  if (selectedPlanId.value) {
+    const plan = dataStore.planesFestivos.find(p => p.id === selectedPlanId.value)
+    if (plan) {
+      // Solo actualizar si las fechas son diferentes
+      if (dateRange.value.start !== plan.fecha_inicio || dateRange.value.end !== plan.fecha_fin) {
+        dateRange.value = {
+          start: plan.fecha_inicio,
+          end: plan.fecha_fin
+        }
+      }
+    }
+  }
+}, { deep: true })
+
 // Filtrado y ordenamiento de plataformas
 const selectedPlatformIds = ref([])
 const platformSortBy = ref('nombre')
@@ -129,15 +145,15 @@ const filteredOrders = computed(() => {
   return mergedOrders.value.filter(o => o.fecha >= dateRange.value.start && o.fecha <= dateRange.value.end)
 })
 
-// Limpiar cambios pendientes cuando cambia el rango de fechas o el plan
-watch([dateRange, selectedPlanId], () => {
+// Limpiar cambios pendientes cuando cambia el plan seleccionado
+watch(selectedPlanId, () => {
   if (hasPendingChanges.value) {
     const confirmDiscard = confirm('Tienes cambios sin guardar. ¿Deseas descartarlos?')
     if (confirmDiscard) {
       pendingChanges.value.clear()
     }
   }
-}, { deep: true })
+})
 
 // Manejadores
 const handleCellClick = ({ clientId, date }) => {
@@ -205,6 +221,7 @@ const handleSaveCell = (formData) => {
     const emptyToNull = (value) => value === '' ? null : value
 
     // Mapear campos de inglés a español
+    // IMPORTANTE: No incluir created_at ni updated_at ya que son gestionados por la BD
     const payload = {
       plan_id: selectedPlanId.value,
       plataforma_id: clientId,
@@ -267,14 +284,19 @@ const saveAllChanges = async () => {
     const updates = changes.filter(c => c.action === 'update')
     for (const change of updates) {
       console.log('Actualizando:', change)
-      const { error } = await supabase
+      console.log('Payload a enviar:', JSON.stringify(change.data, null, 2))
+      const { data: result, error } = await supabase
         .from('entregas')
         .update(change.data)
         .eq('id', change.id)
+        .select()
 
       if (error) {
         console.error('Error en update:', error)
+        console.error('Detalle del error:', JSON.stringify(error, null, 2))
         errors.push({ type: 'update', error })
+      } else {
+        console.log('Actualización exitosa:', result)
       }
     }
 
@@ -282,13 +304,19 @@ const saveAllChanges = async () => {
     const creates = changes.filter(c => c.action === 'create')
     if (creates.length > 0) {
       console.log('Creando:', creates)
-      const { error } = await supabase
+      const payloads = creates.map(c => c.data)
+      console.log('Payloads a insertar:', JSON.stringify(payloads, null, 2))
+      const { data: result, error } = await supabase
         .from('entregas')
-        .insert(creates.map(c => c.data))
+        .insert(payloads)
+        .select()
 
       if (error) {
         console.error('Error en insert:', error)
+        console.error('Detalle del error:', JSON.stringify(error, null, 2))
         errors.push({ type: 'create', error })
+      } else {
+        console.log('Inserción exitosa:', result)
       }
     }
 

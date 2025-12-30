@@ -443,6 +443,7 @@ const closeConfig = () => {
           :orders="filteredOrders"
           :plataformas="filteredAndSortedPlatforms"
           :selectedPlanId="selectedPlanId"
+          :pendingChanges="pendingChanges"
           @cellClick="handleCellClick"
         />
       </template>

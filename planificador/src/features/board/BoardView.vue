@@ -23,20 +23,21 @@ initAuth	@	auth.js:14
   </div>
 
   <!-- Pizarra normal cuando hay plan -->
-  <div v-else class="overflow-x-auto shadow-xl rounded-lg border border-gray-300 bg-white">
+  <div v-else class="overflow-auto max-h-[calc(100vh-200px)] shadow-xl rounded-lg border border-gray-300 bg-white">
     <table class="min-w-full border-collapse">
       <thead>
         <tr>
-          <th class="sticky left-0 z-20 bg-gray-100 border-b border-r border-gray-300 p-3 text-left min-w-[150px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+          <th class="sticky left-0 top-0 z-30 bg-gray-100 border-b border-r border-gray-300 p-3 text-left min-w-[150px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
             <span class="text-gray-500 text-xs uppercase tracking-wider font-bold">Cliente / Día</span>
           </th>
           <th
             v-for="date in dateColumns"
             :key="date"
-            class="min-w-[140px] border-b border-gray-200 p-2 text-center"
+            class="sticky top-0 z-20 min-w-[140px] border-b border-gray-200 p-2 text-center"
             :class="{
               'bg-red-50 border-red-200': isHoliday(date),
-              'bg-gray-100': !isHoliday(date) && isWeekend(date)
+              'bg-gray-100': !isHoliday(date) && isWeekend(date),
+              'bg-white': !isHoliday(date) && !isWeekend(date)
             }"
           >
             <div class="text-xs font-bold" :class="{ 'text-red-600': isHoliday(date), 'text-gray-400': !isHoliday(date) }">
@@ -72,10 +73,11 @@ initAuth	@	auth.js:14
             @click="handleCellClick(plataforma.id, date)"
             class="border-b border-r border-gray-200 h-28 relative cursor-pointer select-none group transition-all"
             :class="{
-              'hover:bg-blue-50': !getOrder(plataforma.id, date),
-              'bg-white hover:ring-2 hover:ring-blue-300 hover:z-10': getOrder(plataforma.id, date) && !isHoliday(date) && !isWeekend(date),
-              'bg-red-50/30': isHoliday(date),
-              'bg-gray-50': !isHoliday(date) && isWeekend(date)
+              'hover:bg-blue-50': !getOrder(plataforma.id, date) && !hasPendingChange(plataforma.id, date),
+              'bg-white hover:ring-2 hover:ring-blue-300 hover:z-10': getOrder(plataforma.id, date) && !isHoliday(date) && !isWeekend(date) && !hasPendingChange(plataforma.id, date),
+              'bg-red-50/30': isHoliday(date) && !hasPendingChange(plataforma.id, date),
+              'bg-gray-50': !isHoliday(date) && isWeekend(date) && !hasPendingChange(plataforma.id, date),
+              'bg-yellow-100 border-2 border-yellow-400 hover:bg-yellow-200': hasPendingChange(plataforma.id, date)
             }"
           >
             <div v-if="!getOrder(plataforma.id, date)" class="w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-30">
@@ -92,18 +94,21 @@ initAuth	@	auth.js:14
                 </div>
                 <!-- Detalles superpuestos sobre el "SÍ" -->
                 <div class="absolute top-1 left-1 text-blue-700 font-bold max-w-[60%] truncate">
-                  {{ formatDate(getOrder(plataforma.id, date).receptionDate) }} {{ getOrder(plataforma.id, date).receptionTime }}
+                  {{ formatDate(getOrder(plataforma.id, date).receptionDate) }} {{ formatTime(getOrder(plataforma.id, date).receptionTime) }}
                 </div>
-                <div class="absolute top-1 right-1 text-right text-black font-bold max-w-[60%] truncate">
-                  {{ getOrder(plataforma.id, date).transportCompany || 'SIN TPTE' }}
-                </div>
-                <div v-if="getOrder(plataforma.id, date).transportComments" class="absolute inset-x-1 top-6 bottom-6 flex items-center justify-center text-center text-gray-400 italic text-[9px] overflow-hidden">
-                  "{{ getOrder(plataforma.id, date).transportComments.substring(0, 20) }}..."
+                <div class="absolute top-1 right-1 text-right max-w-[60%]">
+                  <div class="text-black font-bold truncate">
+                    {{ getOrder(plataforma.id, date).transportCompany || 'SIN TPTE' }}
+                  </div>
+                  <div v-if="getOrder(plataforma.id, date).transportComments" class="text-gray-400 italic text-[9px] truncate mt-0.5">
+                    "{{ getOrder(plataforma.id, date).transportComments.substring(0, 20) }}..."
+                  </div>
                 </div>
                 <div class="absolute bottom-1 left-1 text-green-700 font-bold max-w-[50%]">
                   <div class="flex flex-col">
-                    <span>Fab: {{ formatDate(getOrder(plataforma.id, date).manufacturingDate) }}</span>
-                    <span class="text-[9px] font-normal text-green-600 truncate">{{ getOrder(plataforma.id, date).manufacturingNotes }}</span>
+                    <span class="text-[9px] text-green-500">FAB:</span>
+                    <span class="text-sm">{{ getDayOfWeek(getOrder(plataforma.id, date).manufacturingDate) }} {{ formatDate(getOrder(plataforma.id, date).manufacturingDate) }}</span>
+                    <span v-if="getOrder(plataforma.id, date).manufacturingNotes" class="text-[9px] font-normal text-green-600 truncate">{{ getOrder(plataforma.id, date).manufacturingNotes }}</span>
                   </div>
                 </div>
                 <div class="absolute bottom-1 right-1 text-right text-orange-600 font-bold max-w-[50%]">
@@ -124,7 +129,7 @@ initAuth	@	auth.js:14
 <script setup>
 import { computed } from 'vue'
 import { Plus } from 'lucide-vue-next'
-import { formatDate, getDayOfWeek } from '@/utils/date'
+import { formatDate, getDayOfWeek, formatTime } from '@/utils/date'
 import { useDataStore } from '@/stores/data'
 
 const props = defineProps({
@@ -132,7 +137,8 @@ const props = defineProps({
   orders: Array,
   plataformas: Array,
   onCellClick: Function,
-  selectedPlanId: Number
+  selectedPlanId: Number,
+  pendingChanges: Map
 })
 
 const emit = defineEmits(['cellClick'])
@@ -201,5 +207,12 @@ const getOrder = (clientId, date) => {
 
 const handleCellClick = (clientId, date) => {
   emit('cellClick', { clientId, date })
+}
+
+// Verificar si una celda tiene cambios pendientes
+const hasPendingChange = (plataformaId, date) => {
+  if (!props.pendingChanges) return false
+  const key = `${plataformaId}-${date}`
+  return props.pendingChanges.has(key)
 }
 </script>

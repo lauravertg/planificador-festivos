@@ -10,6 +10,14 @@ export const getDayOfWeek = (dateString) => {
   return days[new Date(dateString).getDay()];
 };
 
+export const formatTime = (timeString) => {
+  if (!timeString) return '';
+  // Si el formato es HH:MM:SS, quitamos los segundos
+  // Si es HH:MM, lo dejamos tal cual
+  const parts = timeString.split(':');
+  return `${parts[0]}:${parts[1]}`;
+};
+
 // Obtener fecha actual en YYYY-MM-DD
 export const getTodayStr = () => new Date().toISOString().split('T')[0];
 
